@@ -42,7 +42,7 @@ const CONFIG = {
   // Google Sheet ID yahan paste karo.
   // Example: 1AbCdEfGhIjKlMnOpQrStUvWxYz
   SPREADSHEET_ID: '1t4H4zRScr1AgFmAGIxMhFPRzxLCrDLGmBJ8K2jSaOs8',
-  PHOTO_FOLDER_ID: '',
+  PHOTO_FOLDER_ID: '1TeFr-S8g9gYB2WKYFjfIBk8UxBl7OW6r',
 
   // GitHub raw URL of Index.html.
   // Example:
