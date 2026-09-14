@@ -1763,6 +1763,45 @@ EXTEND DATE MODAL
 
 
 /* =========================================================
+API CONFIG - GITHUB PAGES -> APPS SCRIPT BACKEND
+========================================================= */
+const APPS_SCRIPT_API_URL = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE';
+
+async function apiCall(method, args){
+  if(!APPS_SCRIPT_API_URL || APPS_SCRIPT_API_URL.indexOf('PASTE_YOUR_') === 0){
+    throw new Error('Apps Script API URL set nahi hai. Index.html mein APPS_SCRIPT_API_URL paste karein.');
+  }
+
+  const response = await fetch(APPS_SCRIPT_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify({ method: method, args: args || [] })
+  });
+
+  const text = await response.text();
+  let payload;
+
+  try {
+    payload = JSON.parse(text);
+  } catch(e) {
+    throw new Error('Apps Script se invalid response mila. Web App URL/deployment check karein.');
+  }
+
+  if(!payload.success){
+    throw new Error(payload.error || 'Backend request failed.');
+  }
+
+  return payload.data;
+}
+
+function apiErrorMessage(error){
+  return error && error.message ? error.message : String(error);
+}
+
+
+/* =========================================================
 GLOBAL
 ========================================================= */
 
@@ -1833,238 +1872,69 @@ LOGIN
 ========================================================= */
 
 function login(){
-
-  const email =
-    document
-      .getElementById('loginEmail')
-      .value
-      .trim()
-      .toLowerCase();
-
-
-  const password =
-    document
-      .getElementById('loginPassword')
-      .value;
-
-
-  const message =
-    document
-      .getElementById('loginMessage');
-
-
-  const button =
-    document
-      .getElementById('loginButton');
-
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const message = document.getElementById('loginMessage');
+  const button = document.getElementById('loginButton');
 
   message.innerHTML = '';
 
-
   if(!email){
-
-    message.innerHTML =
-      '<div class="error">Email required hai.</div>';
-
+    message.innerHTML = '<div class="error">Email required hai.</div>';
     return;
   }
 
-
   button.disabled = true;
+  button.innerText = 'Checking...';
 
-  button.innerText =
-    'Checking...';
+  apiCall('loginUser', [email, password])
+    .then(function(result){
+      button.disabled = false;
+      button.innerText = 'Login';
 
-
-  google.script.run
-
-    .withSuccessHandler(
-      function(result){
-
-        button.disabled = false;
-
-        button.innerText =
-          'Login';
-
-
-        /* =========================================
-        BOSS PASSWORD REQUIRED
-        ========================================= */
-
-        if(
-          result &&
-          result.passwordRequired === true &&
-          result.success !== true
-        ){
-
-          document
-            .getElementById(
-              'passwordSection'
-            )
-            .style.display = 'block';
-
-
-          message.innerHTML =
-            '<div class="info">' +
-            'BOSS email verified. Password enter karein.' +
-            '</div>';
-
-
-          document
-            .getElementById(
-              'loginPassword'
-            )
-            .focus();
-
-
-          return;
-        }
-
-
-        /* =========================================
-        WRONG PASSWORD
-        ========================================= */
-
-        if(
-          result &&
-          result.errorType ===
-          'INVALID_PASSWORD'
-        ){
-
-          message.innerHTML =
-            '<div class="error">' +
-            'Invalid BOSS password.' +
-            '</div>';
-
-
-          document
-            .getElementById(
-              'loginPassword'
-            )
-            .focus();
-
-
-          return;
-        }
-
-
-        /* =========================================
-        LOGIN FAILED
-        ========================================= */
-
-        if(
-          !result ||
-          !result.success
-        ){
-
-          message.innerHTML =
-            '<div class="error">' +
-            (
-              result &&
-              result.message
-                ? result.message
-                : 'EMAIL NOT REGISTERED'
-            ) +
-            '</div>';
-
-          return;
-        }
-
-
-        /* =========================================
-        LOGIN SUCCESS
-        ========================================= */
-
-        localStorage.setItem(
-          'taskSystemLastEmail',
-          email
-        );
-
-
-        currentUser = {
-
-          success:true,
-
-          role:result.role,
-
-          email:result.email,
-
-          name:result.name,
-
-          sessionToken:
-            result.sessionToken || ''
-
-        };
-
-
-        document
-          .getElementById(
-            'loginPage'
-          )
-          .style.display =
-            'none';
-
-
-        document
-          .getElementById(
-            'app'
-          )
-          .style.display =
-            'block';
-
-
-        document
-          .getElementById(
-            'userName'
-          )
-          .innerText =
-            result.name ||
-            result.email;
-
-
-        document
-          .getElementById(
-            'userRole'
-          )
-          .innerText =
-            result.role;
-
-
-        configureRoleUI();
-
-
-        loadDashboard();
-
+      if(result && result.passwordRequired === true && result.success !== true){
+        document.getElementById('passwordSection').style.display = 'block';
+        message.innerHTML = '<div class="info">BOSS email verified. Password enter karein.</div>';
+        document.getElementById('loginPassword').focus();
+        return;
       }
-    )
 
-    .withFailureHandler(
-      function(error){
-
-        button.disabled = false;
-
-        button.innerText =
-          'Login';
-
-
-        message.innerHTML =
-          '<div class="error">' +
-          (
-            error &&
-            error.message
-              ? error.message
-              : String(error)
-          ) +
-          '</div>';
-
+      if(result && result.errorType === 'INVALID_PASSWORD'){
+        message.innerHTML = '<div class="error">Invalid BOSS password.</div>';
+        document.getElementById('loginPassword').focus();
+        return;
       }
-    )
 
-    .loginUser(
-      email,
-      password
-    );
+      if(!result || !result.success){
+        message.innerHTML = '<div class="error">' + escapeHtml(result && result.message ? result.message : 'EMAIL NOT REGISTERED') + '</div>';
+        return;
+      }
 
+      localStorage.setItem('taskSystemLastEmail', email);
+
+      currentUser = {
+        success:true,
+        role:result.role,
+        email:result.email,
+        name:result.name,
+        sessionToken:result.sessionToken || ''
+      };
+
+      document.getElementById('loginPage').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      document.getElementById('userName').innerText = result.name || result.email;
+      document.getElementById('userRole').innerText = result.role;
+      document.getElementById('passwordSection').style.display = 'none';
+      document.getElementById('loginPassword').value = '';
+
+      configureRoleUI();
+      loadDashboard();
+    })
+    .catch(function(error){
+      button.disabled = false;
+      button.innerText = 'Login';
+      message.innerHTML = '<div class="error">' + escapeHtml(apiErrorMessage(error)) + '</div>';
+    });
 }
 
 
@@ -2252,48 +2122,24 @@ function loadDashboard(){
     currentUser.role === 'BOSS'
   ){
 
-    google.script.run
-
-      .withSuccessHandler(
-        renderDashboard
-      )
-
-      .withFailureHandler(
-        showError
-      )
-
-      .getBOSSDashboard(
-        currentUser.sessionToken,
-        document
-          .getElementById(
-            'dashboardEmployee'
-          ).value,
-        document
-          .getElementById(
-            'dashboardFromDate'
-          ).value,
-        document
-          .getElementById(
-            'dashboardToDate'
-          ).value
-      );
+    apiCall('getBOSSDashboard', [
+      currentUser.sessionToken,
+      document.getElementById('dashboardEmployee').value,
+      document.getElementById('dashboardFromDate').value,
+      document.getElementById('dashboardToDate').value
+    ])
+      .then(renderDashboard)
+      .catch(showError);
 
 
   }else{
 
-    google.script.run
-
-      .withSuccessHandler(
-        renderDashboard
-      )
-
-      .withFailureHandler(
-        showError
-      )
-
-      .getDoerDashboard(
-        currentUser.email
-      );
+    apiCall('getDoerDashboard', [
+      currentUser.email,
+      currentUser.sessionToken
+    ])
+      .then(renderDashboard)
+      .catch(showError);
 
   }
 
@@ -3392,77 +3238,30 @@ function sendTaskUpdate(
   remarks
 ){
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(result){
-
-        const button =
-          document
-            .getElementById(
-              'modalActionButton'
-            );
-
-
-        button.disabled =
-          false;
-
-        button.innerText =
-          'Submit';
-
-
-        closeActionModal();
-
-
-        loadDashboard();
-
-      }
-    )
-
-    .withFailureHandler(
-      function(error){
-
-        const button =
-          document
-            .getElementById(
-              'modalActionButton'
-            );
-
-
-        button.disabled =
-          false;
-
-        button.innerText =
-          'Submit';
-
-
-        document
-          .getElementById(
-            'modalMessage'
-          )
-          .innerHTML =
-            '<div class="error">' +
-            (
-              error &&
-              error.message
-                ? error.message
-                : String(error)
-            ) +
-            '</div>';
-
-      }
-    )
-
-    .updateTaskStatus(
-      selectedTaskId,
-      selectedAction,
-      remarks,
-      currentUser.email,
-      photoData
-    );
+  apiCall('updateTaskStatus', [
+    selectedTaskId,
+    selectedAction,
+    remarks,
+    currentUser.email,
+    photoData,
+    currentUser.sessionToken
+  ])
+    .then(function(result){
+      const button = document.getElementById('modalActionButton');
+      button.disabled = false;
+      button.innerText = 'Submit';
+      closeActionModal();
+      loadDashboard();
+    })
+    .catch(function(error){
+      const button = document.getElementById('modalActionButton');
+      button.disabled = false;
+      button.innerText = 'Submit';
+      document.getElementById('modalMessage').innerHTML =
+        '<div class="error">' + escapeHtml(apiErrorMessage(error)) + '</div>';
+    });
 
 }
-
 
 /* =========================================================
 DATE MODAL
@@ -3557,42 +3356,21 @@ function submitDateExtension(){
   }
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(result){
-
-        closeDateModal();
-
-        loadDashboard();
-
-      }
-    )
-
-    .withFailureHandler(
-      function(error){
-
-        message.innerHTML =
-          '<div class="error">' +
-          (
-            error &&
-            error.message
-              ? error.message
-              : String(error)
-          ) +
-          '</div>';
-
-      }
-    )
-
-    .extendTaskDate(
-      selectedDateTaskId,
-      newDate,
-      currentUser.sessionToken
-    );
+  apiCall('extendTaskDate', [
+    selectedDateTaskId,
+    newDate,
+    currentUser.sessionToken
+  ])
+    .then(function(result){
+      closeDateModal();
+      loadDashboard();
+    })
+    .catch(function(error){
+      message.innerHTML =
+        '<div class="error">' + escapeHtml(apiErrorMessage(error)) + '</div>';
+    });
 
 }
-
 
 /* =========================================================
 LOAD EMPLOYEES FOR ASSIGN
@@ -3607,26 +3385,12 @@ function loadEmployeesForAssign(){
   }
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(list){
-
-        employees =
-          list || [];
-
-        populateEmployeeSelects();
-
-      }
-    )
-
-    .withFailureHandler(
-      showError
-    )
-
-    .getAllEmployees(
-      currentUser.sessionToken
-    );
+  apiCall('getAllEmployees', [currentUser.sessionToken])
+    .then(function(list){
+      employees = list || [];
+      populateEmployeeSelects();
+    })
+    .catch(showError);
 
 }
 
@@ -3644,30 +3408,13 @@ function loadEmployees(){
   }
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(list){
-
-        employees =
-          list || [];
-
-
-        populateEmployeeSelects();
-
-
-        renderEmployees();
-
-      }
-    )
-
-    .withFailureHandler(
-      showError
-    )
-
-    .getAllEmployees(
-      currentUser.sessionToken
-    );
+  apiCall('getAllEmployees', [currentUser.sessionToken])
+    .then(function(list){
+      employees = list || [];
+      populateEmployeeSelects();
+      renderEmployees();
+    })
+    .catch(showError);
 
 }
 
@@ -3932,127 +3679,38 @@ function assignNewTask(){
     '';
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(result){
-
-        button.disabled =
-          false;
-
-        button.innerText =
-          'Assign Task';
-
-
-        message.innerHTML =
-          '<div class="success">' +
-          escapeHtml(
-            result.message
-          ) +
-          '</div>';
-
-
-        document
-          .getElementById(
-            'taskName'
-          )
-          .value = '';
-
-        document
-          .getElementById(
-            'voiceStatus'
-          ).innerText =
-            'Voice input optional — aap manually bhi task edit kar sakte hain.';
-
-
-        document
-          .getElementById(
-            'taskCategory'
-          )
-          .value = '';
-
-
-        document
-          .getElementById(
-            'taskDescription'
-          )
-          .value = '';
-
-
-        document
-          .getElementById(
-            'assignRemarks'
-          )
-          .value = '';
-
-
-        document
-          .getElementById(
-            'employeeSelect'
-          )
-          .value = '';
-
-
-        document
-          .getElementById(
-            'dueDate'
-          )
-          .value = '';
-
-
-        loadDashboard();
-
-      }
-    )
-
-    .withFailureHandler(
-      function(error){
-
-        button.disabled =
-          false;
-
-        button.innerText =
-          'Assign Task';
-
-
-        message.innerHTML =
-          '<div class="error">' +
-          (
-            error &&
-            error.message
-              ? error.message
-              : String(error)
-          ) +
-          '</div>';
-
-      }
-    )
-
-    .assignTask(
-
-      {
-        taskName:taskName,
-
-        category:category,
-
-        description:description,
-
-        priority:priority,
-
-        doerEmail:
-          employee.email,
-
-        doerName:
-          employee.name,
-
-        dueDate:dueDate,
-
-        remarks:remarks
-      },
-
-      currentUser.sessionToken
-
-    );
+  apiCall('assignTask', [
+    {
+      taskName: taskName,
+      category: category,
+      description: description,
+      priority: priority,
+      doerEmail: employee.email,
+      doerName: employee.name,
+      dueDate: dueDate,
+      remarks: remarks
+    },
+    currentUser.sessionToken
+  ])
+    .then(function(result){
+      button.disabled = false;
+      button.innerText = 'Assign Task';
+      message.innerHTML = '<div class="success">' + escapeHtml(result.message) + '</div>';
+      document.getElementById('taskName').value = '';
+      document.getElementById('voiceStatus').innerText = 'Voice input optional — aap manually bhi task edit kar sakte hain.';
+      document.getElementById('taskCategory').value = '';
+      document.getElementById('taskDescription').value = '';
+      document.getElementById('assignRemarks').value = '';
+      document.getElementById('employeeSelect').value = '';
+      document.getElementById('priority').value = 'MEDIUM';
+      document.getElementById('dueDate').value = '';
+      loadDashboard();
+    })
+    .catch(function(error){
+      button.disabled = false;
+      button.innerText = 'Assign Task';
+      message.innerHTML = '<div class="error">' + escapeHtml(apiErrorMessage(error)) + '</div>';
+    });
 
 }
 
@@ -4244,69 +3902,22 @@ function uploadCSV(){
           'Uploading...';
 
 
-        google.script.run
-
-          .withSuccessHandler(
-            function(result){
-
-              button.disabled =
-                false;
-
-              button.innerText =
-                'Upload & Assign';
-
-
-              message.innerHTML =
-                '<div class="success">' +
-                escapeHtml(
-                  result.message
-                ) +
-                '<br>Generated IDs: ' +
-                escapeHtml(
-                  result.taskIds.join(', ')
-                ) +
-                '</div>';
-
-
-              document
-                .getElementById(
-                  'csvFile'
-                )
-                .value = '';
-
-
-              loadDashboard();
-
-            }
-          )
-
-          .withFailureHandler(
-            function(error){
-
-              button.disabled =
-                false;
-
-              button.innerText =
-                'Upload & Assign';
-
-
-              message.innerHTML =
-                '<div class="error">' +
-                (
-                  error &&
-                  error.message
-                    ? error.message
-                    : String(error)
-                ) +
-                '</div>';
-
-            }
-          )
-
-          .bulkAssignTasks(
-            rows,
-            currentUser.sessionToken
-          );
+        apiCall('bulkAssignTasks', [
+          rows,
+          currentUser.sessionToken
+        ])
+          .then(function(result){
+            button.disabled = false;
+            button.innerText = 'Upload & Assign';
+            message.innerHTML = '<div class="success">' + escapeHtml(result.message) + '<br>Generated IDs: ' + escapeHtml((result.taskIds || []).join(', ')) + '</div>';
+            document.getElementById('csvFile').value = '';
+            loadDashboard();
+          })
+          .catch(function(error){
+            button.disabled = false;
+            button.innerText = 'Upload & Assign';
+            message.innerHTML = '<div class="error">' + escapeHtml(apiErrorMessage(error)) + '</div>';
+          });
 
 
       }catch(error){
@@ -4691,35 +4302,27 @@ function loadReport(){
       '</div>';
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(report){
-        if(reportButton){
-          reportButton.disabled = false;
-          reportButton.innerText = 'Generate Report';
-        }
-        renderReport(report);
+  apiCall('getBOSSReport', [
+    currentUser.sessionToken,
+    period,
+    employee,
+    fromDate,
+    toDate
+  ])
+    .then(function(report){
+      if(reportButton){
+        reportButton.disabled = false;
+        reportButton.innerText = 'Generate Report';
       }
-    )
-
-    .withFailureHandler(
-      function(error){
-        if(reportButton){
-          reportButton.disabled = false;
-          reportButton.innerText = 'Generate Report';
-        }
-        showError(error);
+      renderReport(report);
+    })
+    .catch(function(error){
+      if(reportButton){
+        reportButton.disabled = false;
+        reportButton.innerText = 'Generate Report';
       }
-    )
-
-    .getBOSSReport(
-      currentUser.sessionToken,
-      period,
-      employee,
-      fromDate,
-      toDate
-    );
+      showError(error);
+    });
 
 }
 
@@ -5058,30 +4661,17 @@ function downloadReport(){
       .value;
 
 
-  google.script.run
-
-    .withSuccessHandler(
-      function(result){
-
-        downloadTextFile(
-          result.csv,
-          result.filename
-        );
-
-      }
-    )
-
-    .withFailureHandler(
-      showError
-    )
-
-    .getReportDownloadData(
-      currentUser.sessionToken,
-      period,
-      employee,
-      fromDate,
-      toDate
-    );
+  apiCall('getReportDownloadData', [
+    currentUser.sessionToken,
+    period,
+    employee,
+    fromDate,
+    toDate
+  ])
+    .then(function(result){
+      downloadTextFile(result.csv, result.filename);
+    })
+    .catch(showError);
 
 }
 
@@ -5156,13 +4746,18 @@ function logout(){
     currentUser.sessionToken
   ){
 
-    google.script.run
-      .logoutBoss(
-        currentUser.sessionToken
-      );
+    apiCall('logoutBoss', [currentUser.sessionToken]).catch(function(){});
 
   }
 
+
+  if(
+    currentUser &&
+    currentUser.role === 'DOER' &&
+    currentUser.sessionToken
+  ){
+    apiCall('logoutDoer', [currentUser.sessionToken]).catch(function(){});
+  }
 
   currentUser =
     null;
